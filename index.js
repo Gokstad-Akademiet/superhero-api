@@ -6,6 +6,7 @@ let db = new sqlite3.Database('./database.db', (err) => {
         console.error(err.message);
     }
     console.log('Koblet til SQLite-databasen.');
+    console.log('Du kan nå begynne å fylle databasen.');
 });
 
 const app = express();
@@ -13,6 +14,74 @@ const port = 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+
+// Endepunkt for å opprette databasen med riktige tabeller
+
+app.get('/create-database', (req, res) => {
+    // Opprett en ny databaseinstans
+    let db = new sqlite3.Database('./database.db', (err) => {
+        if (err) {
+            console.error(err.message);
+            res.status(500).send('Kunne ikke koble til databasen');
+        } else {
+            console.log('Koblet til SQLite-databasen.');
+        }
+    });
+
+
+    // SQL for å opprette tabeller
+    const sqlPeople = `
+      CREATE TABLE IF NOT EXISTS people (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        power TEXT NOT NULL,
+        image TEXT NOT NULL,
+        age REAL NOT NULL,
+        location_id INTEGER
+      );`;
+
+    const sqlLocations = `
+      CREATE TABLE IF NOT EXISTS locations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        city TEXT NOT NULL,
+        country TEXT NOT NULL
+      );`;
+
+    // Utfør SQL-skriptet for å opprette people-tabellen
+    db.run(sqlPeople, (err) => {
+        if (err) {
+            console.error(err.message);
+            res.status(500).send('Kunne ikke opprette people-tabellen');
+            return;
+        }
+        console.log('people-tabellen er opprettet.');
+    });
+
+    // Utfør SQL-skriptet for å opprette locations-tabellen
+    db.run(sqlLocations, (err) => {
+        if (err) {
+            console.error(err.message);
+            res.status(500).send('Kunne ikke opprette locations-tabellen');
+            return;
+        }
+        console.log('locations-tabellen er opprettet.');
+    });
+
+    // Lukk databasetilkoblingen
+    db.close((err) => {
+        if (err) {
+            console.error(err.message);
+            res.status(500).send('Kunne ikke lukke databasetilkoblingen');
+            return;
+        }
+        console.log('Databasetilkoblingen er lukket.');
+        res.send('Databasen og nødvendige tabeller er opprettet.');
+    });
+
+});
+
 
 // Endepunkt for å tømme hele databasen
 app.delete('/clear-database', (req, res) => {
@@ -90,6 +159,29 @@ app.get('/heroes/:id', (req, res) => {
     const personId = req.params.id;
 
     db.get(`SELECT * FROM people WHERE id = ?`, [personId], (err, row) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        if (!row) {
+            res.status(404).json({ message: "Person ikke funnet" });
+            return;
+        }
+        res.json(row);
+    });
+});
+
+app.get('/heroes-location/:id', (req, res) => {
+    const personId = req.params.id;
+
+    const query = `
+        SELECT p.*, l.city, l.country
+        FROM people p
+        INNER JOIN locations l ON p.location_id = l.id
+        WHERE p.id = ?
+    `;
+
+    db.get(query, [personId], (err, row) => {
         if (err) {
             res.status(500).json({ error: err.message });
             return;
